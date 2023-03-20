@@ -128,6 +128,14 @@ typedef union {
   int64_t stamp;
 } LdsStamp;
 
+// Changes made by me!
+typedef struct {
+  float x; /**< X axis, Unit: m*/
+  float y; /**< Y axis, Unit: m*/
+  float z; /**< Z axis, Unit: m*/
+  float intensity; /**Intensity*/
+} LivoxPointXyzi;
+
 /** Configuration in json config file for livox lidar */
 typedef struct {
   char broadcast_code[16];
@@ -265,6 +273,8 @@ void ParseCommandlineInputBdCode(const char *cammandline_str,
                                  std::vector<std::string> &bd_code_list);
 PointConvertHandler GetConvertHandler(uint8_t data_type);
 uint8_t *LivoxPointToPxyzrtl(uint8_t *point_buf, LivoxEthPacket *eth_packet,
+    ExtrinsicParameter &extrinsic, uint32_t line_num);
+uint8_t *LivoxPointToPxyzi(uint8_t *point_buf, LivoxEthPacket *eth_packet,
     ExtrinsicParameter &extrinsic, uint32_t line_num);
 void ZeroPointDataOfStoragePacket(StoragePacket* storage_packet);
 uint8_t *LivoxImuDataProcess(uint8_t *point_buf, LivoxEthPacket *eth_packet);

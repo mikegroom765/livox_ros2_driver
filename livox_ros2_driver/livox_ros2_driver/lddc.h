@@ -92,6 +92,7 @@ class Lddc {
   void PollingLidarPointCloudData(uint8_t handle, LidarDevice *lidar);
   void PollingLidarImuData(uint8_t handle, LidarDevice *lidar);
   void InitPointcloud2MsgHeader(sensor_msgs::msg::PointCloud2& cloud);
+  void InitPointcloud2MsgHeaderXYZI(sensor_msgs::msg::PointCloud2& cloud);
   void FillPointsToPclMsg(PointCloud& pcl_msg,
       LivoxPointXyzrtl* src_point, uint32_t num);
   void FillPointsToCustomMsg(livox_interfaces::msg::CustomMsg& livox_msg,

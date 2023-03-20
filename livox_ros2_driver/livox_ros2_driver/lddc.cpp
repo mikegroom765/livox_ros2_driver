@@ -107,7 +107,7 @@ void Lddc::InitPointcloud2MsgHeader(sensor_msgs::msg::PointCloud2& cloud) {
   cloud.header.frame_id.assign(frame_id_);
   cloud.height = 1;
   cloud.width = 0;
-  cloud.fields.resize(6);
+  cloud.fields.resize(4);
   cloud.fields[0].offset = 0;
   cloud.fields[0].name = "x";
   cloud.fields[0].count = 1;
@@ -135,6 +135,38 @@ void Lddc::InitPointcloud2MsgHeader(sensor_msgs::msg::PointCloud2& cloud) {
   cloud.point_step = sizeof(LivoxPointXyzrtl);
 }
 
+void Lddc::InitPointcloud2MsgHeaderXYZI(sensor_msgs::msg::PointCloud2& cloud) {
+  cloud.header.frame_id.assign(frame_id_);
+  cloud.height = 1;
+  cloud.width = 0;
+  cloud.fields.resize(4);
+  cloud.fields[0].offset = 0;
+  cloud.fields[0].name = "x";
+  cloud.fields[0].count = 1;
+  cloud.fields[0].datatype = sensor_msgs::msg::PointField::FLOAT32;
+  cloud.fields[1].offset = 4;
+  cloud.fields[1].name = "y";
+  cloud.fields[1].count = 1;
+  cloud.fields[1].datatype = sensor_msgs::msg::PointField::FLOAT32;
+  cloud.fields[2].offset = 8;
+  cloud.fields[2].name = "z";
+  cloud.fields[2].count = 1;
+  cloud.fields[2].datatype = sensor_msgs::msg::PointField::FLOAT32;
+  cloud.fields[3].offset = 12;
+  cloud.fields[3].name = "intensity";
+  cloud.fields[3].count = 1;
+  cloud.fields[3].datatype = sensor_msgs::msg::PointField::FLOAT32;
+  // cloud.fields[4].offset = 16;
+  // cloud.fields[4].name = "tag";
+  // cloud.fields[4].count = 1;
+  // cloud.fields[4].datatype = sensor_msgs::msg::PointField::UINT8;
+  // cloud.fields[5].offset = 17;
+  // cloud.fields[5].name = "line";
+  // cloud.fields[5].count = 1;
+  // cloud.fields[5].datatype = sensor_msgs::msg::PointField::UINT8;
+  cloud.point_step = sizeof(LivoxPointXyzi);
+}
+
 uint32_t Lddc::PublishPointcloud2(LidarDataQueue *queue, uint32_t packet_num,
                                   uint8_t handle) {
   uint64_t timestamp = 0;
@@ -149,10 +181,10 @@ uint32_t Lddc::PublishPointcloud2(LidarDataQueue *queue, uint32_t packet_num,
   }
 
   sensor_msgs::msg::PointCloud2 cloud;
-  InitPointcloud2MsgHeader(cloud);
+  InitPointcloud2MsgHeaderXYZI(cloud);
   cloud.data.resize(packet_num * kMaxPointPerEthPacket *
-                    sizeof(LivoxPointXyzrtl));
-  cloud.point_step = sizeof(LivoxPointXyzrtl);
+                    sizeof(LivoxPointXyzi));
+  cloud.point_step = sizeof(LivoxPointXyzi);
 
   uint8_t *point_base = cloud.data.data();
   uint8_t data_source = lidar->data_src;
@@ -215,6 +247,7 @@ uint32_t Lddc::PublishPointcloud2(LidarDataQueue *queue, uint32_t packet_num,
       std::dynamic_pointer_cast<rclcpp::Publisher
       <sensor_msgs::msg::PointCloud2>>(GetCurrentPublisher(handle));
   if (kOutputToRos == output_type_) {
+    // cloud.header.stamp = cur_node_->now().nanoseconds();
     publisher->publish(cloud);
   } else {
 #if 0    
@@ -301,7 +334,7 @@ uint32_t Lddc::PublishPointcloudData(LidarDataQueue *queue, uint32_t packet_num,
         break;
       }
     } else {
-      LivoxPointToPxyzrtl(point_buf, raw_packet, lidar->extrinsic_parameter, \
+      LivoxPointToPxyzi(point_buf, raw_packet, lidar->extrinsic_parameter, \
           line_num);
     }
     LivoxPointXyzrtl *dst_point = (LivoxPointXyzrtl *)point_buf;
@@ -316,11 +349,15 @@ uint32_t Lddc::PublishPointcloudData(LidarDataQueue *queue, uint32_t packet_num,
     last_timestamp = timestamp;
   }
 
-  rclcpp::Publisher<PointCloud>::SharedPtr publisher =
-      std::dynamic_pointer_cast<rclcpp::Publisher<PointCloud>>
+  rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr publisher =
+      std::dynamic_pointer_cast<rclcpp::Publisher<sensor_msgs::msg::PointCloud2>>
       (GetCurrentPublisher(handle));
   if (kOutputToRos == output_type_) {
-    publisher->publish(cloud);
+    // override Livox time definition
+    cloud.header.stamp = cur_node_->now().nanoseconds();
+    sensor_msgs::msg::PointCloud2 cloud_ros;
+    pcl::toROSMsg(cloud,cloud_ros);
+    publisher->publish(cloud_ros);
   } else {
 #if 0    
     if (bag_) {
