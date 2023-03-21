@@ -139,6 +139,8 @@ void Lddc::InitPointcloud2MsgHeaderXYZI(sensor_msgs::msg::PointCloud2& cloud) {
   cloud.header.frame_id.assign(frame_id_);
   cloud.height = 1;
   cloud.width = 0;
+  cloud.is_bigendian = false;
+  cloud.is_dense = true;
   cloud.fields.resize(4);
   cloud.fields[0].offset = 0;
   cloud.fields[0].name = "x";
@@ -156,15 +158,7 @@ void Lddc::InitPointcloud2MsgHeaderXYZI(sensor_msgs::msg::PointCloud2& cloud) {
   cloud.fields[3].name = "intensity";
   cloud.fields[3].count = 1;
   cloud.fields[3].datatype = sensor_msgs::msg::PointField::FLOAT32;
-  // cloud.fields[4].offset = 16;
-  // cloud.fields[4].name = "tag";
-  // cloud.fields[4].count = 1;
-  // cloud.fields[4].datatype = sensor_msgs::msg::PointField::UINT8;
-  // cloud.fields[5].offset = 17;
-  // cloud.fields[5].name = "line";
-  // cloud.fields[5].count = 1;
-  // cloud.fields[5].datatype = sensor_msgs::msg::PointField::UINT8;
-  cloud.point_step = sizeof(LivoxPointXyzi);
+  cloud.point_step = 16;
 }
 
 uint32_t Lddc::PublishPointcloud2(LidarDataQueue *queue, uint32_t packet_num,
@@ -268,6 +262,7 @@ void Lddc::FillPointsToPclMsg(PointCloud& pcl_msg, \
   LivoxPointXyzrtl* point_xyzrtl = (LivoxPointXyzrtl*)src_point;
   for (uint32_t i = 0; i < num; i++) {
     pcl::PointXYZI point;
+    RCLCPP_WARN(cur_node_->get_logger(), "size: %d", sizeof(point.data));
     point.x = point_xyzrtl->x;
     point.y = point_xyzrtl->y;
     point.z = point_xyzrtl->z;
@@ -275,6 +270,36 @@ void Lddc::FillPointsToPclMsg(PointCloud& pcl_msg, \
     ++point_xyzrtl;
     pcl_msg.points.push_back(point);
   }
+}
+
+void Lddc::FillPointsToPointCloud2Msg(sensor_msgs::msg::PointCloud2& ros_msg, \
+    LivoxPointXyzrtl* src_point, uint32_t num) {
+
+  LivoxPointXyzrtl* point_xyzrtl = (LivoxPointXyzrtl*)src_point;
+
+  ros_msg.data.reserve(ros_msg.data.size()+num*16); // 4 bytes * 4 fields = 16 bytes
+
+  auto lmbAddFloatToPC2Data = [&](unsigned char *f)
+  {
+    for (size_t j = 0; j < sizeof(float); j++)
+    {
+      ros_msg.data.emplace_back(f[j]);
+    };
+  };
+
+  for (uint32_t i = 0; i < num; i++) {
+    unsigned char x[sizeof(float)], y[sizeof(float)], z[sizeof(float)], intensity[sizeof(float)];
+    *(float *)(x) = point_xyzrtl->x;
+    *(float *)(y) = point_xyzrtl->y;
+    *(float *)(z) = point_xyzrtl->z;
+    *(float *)(intensity) = point_xyzrtl->reflectivity;
+    lmbAddFloatToPC2Data(x);
+    lmbAddFloatToPC2Data(y);
+    lmbAddFloatToPC2Data(z);
+    lmbAddFloatToPC2Data(intensity);
+    ++point_xyzrtl;
+  }
+  ros_msg.width += num;
 }
 
 /* for pcl::pxyzi */
@@ -291,10 +316,13 @@ uint32_t Lddc::PublishPointcloudData(LidarDataQueue *queue, uint32_t packet_num,
     return 0;
   }
 
+  sensor_msgs::msg::PointCloud2 cloud_ros;
+  InitPointcloud2MsgHeaderXYZI(cloud_ros);
+
   PointCloud cloud;
-  cloud.header.frame_id.assign(frame_id_);
-  cloud.height = 1;
-  cloud.width = 0;
+  // cloud.header.frame_id.assign(frame_id_);
+  // cloud.height = 1;
+  // cloud.width = 0;
 
   uint8_t point_buf[2048];
   uint32_t is_zero_packet = 0;
@@ -317,7 +345,7 @@ uint32_t Lddc::PublishPointcloudData(LidarDataQueue *queue, uint32_t packet_num,
       }
     }
     if (!published_packet) {
-      cloud.header.stamp = timestamp / 1000.0;  // to pcl ros time stamp
+      // cloud.header.stamp = timestamp / 1000.0;  // to pcl ros time stamp
     }
     uint32_t single_point_num = storage_packet.point_num * echo_num;
 
@@ -334,33 +362,46 @@ uint32_t Lddc::PublishPointcloudData(LidarDataQueue *queue, uint32_t packet_num,
         break;
       }
     } else {
-      LivoxPointToPxyzi(point_buf, raw_packet, lidar->extrinsic_parameter, \
+      LivoxPointToPxyzrtl(point_buf, raw_packet, lidar->extrinsic_parameter, \
           line_num);
     }
     LivoxPointXyzrtl *dst_point = (LivoxPointXyzrtl *)point_buf;
-    FillPointsToPclMsg(cloud, dst_point, single_point_num);
+    // FillPointsToPclMsg(cloud, dst_point, single_point_num);
+    FillPointsToPointCloud2Msg(cloud_ros, dst_point, single_point_num);
     if (!is_zero_packet) {
       QueuePopUpdate(queue);
     } else {
       is_zero_packet = 0;
     }
-    cloud.width += single_point_num;
+    // cloud.width += single_point_num;
     ++published_packet;
     last_timestamp = timestamp;
   }
+  // RCLCPP_WARN(cur_node_->get_logger(), "cloud.width : %d", cloud.width);
+  // RCLCPP_WARN(cur_node_->get_logger(), "cloud.points : %d size: %d", cloud.points.size(), sizeof(pcl::PointXYZI));
+
+
   rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr publisher =
       std::dynamic_pointer_cast<rclcpp::Publisher<sensor_msgs::msg::PointCloud2>>
       (GetCurrentPublisher(handle));
   if (kOutputToRos == output_type_) {
     // override Livox time definition
-    cloud.header.stamp = cur_node_->now().nanoseconds();
-    sensor_msgs::msg::PointCloud2 cloud_ros;
-    pcl::toROSMsg(cloud,cloud_ros);
-    cloud_ros.point_step = sizeof(LivoxPointXyzi);
-    cloud_ros.row_step     = cloud_ros.width * cloud_ros.point_step;
-    cloud_ros.is_bigendian = false;
-    cloud_ros.is_dense     = true;
-    cloud_ros.data.resize(cloud_ros.row_step); /** Adjust to the real size */
+    // sensor_msgs::msg::PointCloud2 cloud_ros;
+    // pcl::toROSMsg(cloud,cloud_ros);
+    // RCLCPP_INFO(cur_node_->get_logger(), "data size: %d", cloud_ros.data.size());
+    // RCLCPP_WARN(cur_node_->get_logger(), "cloud_ros.width : %d", cloud_ros.width);
+    // cloud.header.stamp = cur_node_->now().nanoseconds();
+    // InitPointcloud2MsgHeaderXYZI(cloud_ros);
+    cloud_ros.header.stamp = cur_node_->get_clock()->now();
+    cloud_ros.row_step = cloud_ros.width * cloud_ros.point_step;
+    // RCLCPP_WARN(cur_node_->get_logger(), "cloud_ros.width : %d", cloud_ros.width);
+
+    // cloud_ros.fields[3].offset = 12;
+    //cloud_ros.data.resize(cloud_ros.row_step); /** Adjust to the real size */
+    // RCLCPP_INFO(cur_node_->get_logger(), "i offset: %d", cloud_ros.fields[3].offset);
+    // RCLCPP_INFO(cur_node_->get_logger(), "data size: %d", cloud_ros.data.size());
+    // RCLCPP_INFO(cur_node_->get_logger(), "row_step: %d", cloud_ros.row_step);
+    // RCLCPP_INFO(cur_node_->get_logger(), "point_step: %d", cloud_ros.point_step);
     publisher->publish(cloud_ros);
   } else {
 #if 0    

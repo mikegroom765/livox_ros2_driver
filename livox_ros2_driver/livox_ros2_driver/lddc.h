@@ -98,6 +98,8 @@ class Lddc {
   void FillPointsToCustomMsg(livox_interfaces::msg::CustomMsg& livox_msg,
       LivoxPointXyzrtl* src_point, uint32_t num, uint32_t offset_time,
       uint32_t point_interval, uint32_t echo_num);
+  void FillPointsToPointCloud2Msg(sensor_msgs::msg::PointCloud2& ros_msg,
+    LivoxPointXyzrtl* src_point, uint32_t num);
   uint8_t transfer_format_;
   uint8_t use_multi_topic_;
   uint8_t data_src_;

@@ -230,7 +230,7 @@ uint8_t *LivoxPointToPxyzrtl(uint8_t *point_buf, LivoxEthPacket *eth_packet,
 
 uint8_t *LivoxPointToPxyzi(uint8_t *point_buf, LivoxEthPacket *eth_packet,
     ExtrinsicParameter &extrinsic, uint32_t line_num) {
-  LivoxPointXyzrtl *dst_point = (LivoxPointXyzrtl *)point_buf;
+  LivoxPointXyzi *dst_point = (LivoxPointXyzi *)point_buf;
   uint32_t points_per_packet = GetPointsPerPacket(eth_packet->data_type);
   LivoxPoint *raw_point = reinterpret_cast<LivoxPoint *>(eth_packet->data);
 
