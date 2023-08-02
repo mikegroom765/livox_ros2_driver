@@ -228,6 +228,29 @@ uint8_t *LivoxPointToPxyzrtl(uint8_t *point_buf, LivoxEthPacket *eth_packet,
   return (uint8_t *)dst_point;
 }
 
+uint8_t *LivoxPointToPxyzi(uint8_t *point_buf, LivoxEthPacket *eth_packet,
+    ExtrinsicParameter &extrinsic, uint32_t line_num) {
+  LivoxPointXyzi *dst_point = (LivoxPointXyzi *)point_buf;
+  uint32_t points_per_packet = GetPointsPerPacket(eth_packet->data_type);
+  LivoxPoint *raw_point = reinterpret_cast<LivoxPoint *>(eth_packet->data);
+
+  while (points_per_packet) {
+    RawPointConvert((LivoxPointXyzr *)dst_point, raw_point);
+    if (extrinsic.enable && IsTripleFloatNoneZero(raw_point->x,
+        raw_point->y, raw_point->z)) {
+      PointXyz src_point = *((PointXyz *)dst_point);
+      PointExtrisincCompensation((PointXyz *)dst_point, src_point, extrinsic);
+    }
+    // dst_point->tag = 0;
+    // dst_point->line = 0;
+    // ++raw_point;
+    // ++dst_point;
+    --points_per_packet;
+  }
+
+  return (uint8_t *)dst_point;
+}
+
 static uint8_t *LivoxRawPointToPxyzrtl(uint8_t *point_buf, LivoxEthPacket *eth_packet,
     ExtrinsicParameter &extrinsic, uint32_t line_num) {
   LivoxPointXyzrtl *dst_point = (LivoxPointXyzrtl *)point_buf;
